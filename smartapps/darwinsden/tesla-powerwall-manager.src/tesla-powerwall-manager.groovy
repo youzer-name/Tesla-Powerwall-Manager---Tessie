@@ -19,10 +19,11 @@
  */
 
 String version() {
-    return "v0.3.84.20240405"
+    return "v0.3.83.20240216"
 }
 
 /*  
+ * 17-Sep-2024 >>> v0.0.1.20240917 - Fork code to implement Tessie API access to Tesla Fleet API.
  * 05-Apr-2024 >>> v0.3.84.20240405 - Correct for apparent Tesla server API change relating to Battery Percentage. Thanks to @NeilR.
  * 16-Feb-2024 >>> v0.3.83.20240216 - Re-add Backup-Only mode with deprecated warning.
  * 16-Feb-2024 >>> v0.3.82.20240216 - Add battery capacity/total energy - thank you D. Mills for the code snippet. Added grid charging enable/
@@ -66,8 +67,8 @@ String version() {
 import groovy.transform.Field
 
 definition (
-    name: "Tesla Powerwall Manager", namespace: "darwinsden", author: "eedwards", description: "Monitor and control your Tesla Powerwall",
-    importUrl: "https://raw.githubusercontent.com/DarwinsDen/Tesla-Powerwall-Manager/master/smartapps/darwinsden/tesla-powerwall-manager.src/tesla-powerwall-manager.groovy",
+    name: "Tesla Powerwall Manager - Tessie", namespace: "alan_f", author: "alan_f", description: "Monitor and control your Tesla Powerwall",
+    importUrl: "https://raw.githubusercontent.com/youzer-name/Tesla-Powerwall-Manager---Tessie/master/smartapps/darwinsden/tesla-powerwall-manager.src/tesla-powerwall-manager.groovy",
     category: "My Apps",
     iconUrl: pwLogo,
     iconX2Url: pwLogo
@@ -79,6 +80,7 @@ preferences {
     page(name: "teslaAccountInfo")
     page(name: "gatewayAccountInfo")
     page(name: "pageDashboardTile")
+    page(name: "pageTessie")
     page(name: "pageNotifications")
     page(name: "pageSchedules")
     page(name: "pageScheduleOptions")
@@ -124,7 +126,9 @@ private pageMain() {
             }
         }
 
+
         section("Preferences") {
+            hrefMenuPage ("pageTessie", "Tessie preferences", "", notifyIcon, null)
             hrefMenuPage ("pageNotifications", "Notification preferences..", "", notifyIcon, null)
             state.scheduleCount = state.scheduleCount ?: 0
             hrefMenuPage ("pageSchedules", "Schedule Powerwall setting changes..", "(${state.scheduleCount} active schedules)", schedIcon, null, state.scheduleCount > 0 ? "complete" : null)
@@ -594,7 +598,8 @@ Boolean connectedToGateway() {
 Boolean connectedToTeslaServer() {
     Boolean connectedViaInputToken = inputAccessToken && state.inputAccessTokenValid
     Boolean connectedViaTokenFromUrl = state.accessTokenFromUrlValid && ((hubIsSt() && accessTokenIp) || (!hubIsSt() && accessTokenUrl))
-    return state.serverVerified && (connectedViaInputToken || connectedViaTokenFromUrl)      
+    Boolean connectedViaTessie = useTessie //alan_f
+    return state.serverVerified && (connectedViaInputToken || connectedViaTokenFromUrl || connectedViaTessie)      
 }
 
 String getTokenDateString() {
@@ -707,16 +712,19 @@ String getTeslaServerStatus() {
        
         Boolean tokenFromUrlEntered = (!hubIsSt() && accessTokenUrl) || (hubIsSt() && accessTokenIp)
         Boolean inputTokenEntered = inputAccessToken
-        if (!inputTokenEntered && !tokenFromUrlEntered) {
+        if (!inputTokenEntered && !tokenFromUrlEntered && !useTessie) { //alan_f
             messageStr = "You are not connected to the Tesla server.\nEnter your Tesla account token.."
+            
         } else {
-            if (state.useInputToken || state.useTokenFromUrl) {
+            if (state.useInputToken || state.useTokenFromUrl || useTessie) {
                 getPowerwalls() 
+                
                 if (state.serverVerified) {
                     state.serverValidAtStartup = true
                     messageStr = messageStr + "You are connected to the Tesla server." +
-                         "\nSite Name: ${state.siteName},  Id: ${state.pwId}." +
-                         getTokenDateString()
+                         "\nSite Name: ${state.siteName},  Id: ${state.pwId}." 
+                    if (useTessie) { messageStr = messageStr + " Connected via Tessie." }
+                    else { messageStr = messageStr + getTokenDateString() }
                 } else {
                      messageStr = "Error: No Powerwalls found on Tesla server\n" +
                         "Please verify your Tesla Account access token."
@@ -797,6 +805,18 @@ String getLocalGwStatus() {
         logger ("Error getting local gateway status: ${e}","warn")
         state.gatewayStatusStr = "Error accessing local gateway at: ${gatewayAddress}.\n" + "Please verify your gateway address and password. ${e}" 
         return state.gatewayStatusStr
+    }
+}
+
+    
+def pageTessie() {
+    dynamicPage(name: "pageTessie", title: "Tessie Preferences", install: false, uninstall: false) {
+        section("Tessie Settings") {
+            input "useTessie", "bool", required: false, defaultValue: false, title: "use Tessie API instead of Tesla API"
+            input "tessieToken", "string", required: false, title: "Your Tessie API token"
+            input "tessieSiteId", "string", required: false, title: "Your Tesla Energy site ID"
+
+        }
     }
 }
 
@@ -1384,6 +1404,26 @@ private httpAsyncGet (handlerMethod, String url, String path, query=null) {
 }
 
 private httpAuthAsyncGet(handlerMethod, String path, Integer attempt = 1) {
+    if (useTessie) {
+      try {
+          logger ("Async requesting: ${path}","trace")
+          def requestParameters = [
+              uri: tessieUrl,
+              path: path,
+              headers: ['User-Agent': agent, 'X-Tesla-User-Agent': agent, Authorization: "Bearer ${tessieToken}"]
+            ]
+          if (hubIsSt()) {
+              include 'asynchttp_v1'
+              asynchttp_v1.get(handlerMethod, requestParameters, [attempt: attempt])
+          } else {
+              asynchttpGet(handlerMethod, requestParameters, [attempt: attempt])
+          }
+      } catch (e) {
+          log.error "Http Async Get failed: ${e}"
+      }
+    } 
+    else
+    {
     String theToken = getToken()
     if (theToken) {
       try {
@@ -1406,14 +1446,26 @@ private httpAuthAsyncGet(handlerMethod, String path, Integer attempt = 1) {
         logger("Async request to ${path} not sent. Token is invalid","warn")
     }
 }
+}
 
 private httpAuthGet(String path, Closure closure, authToken = null) {
+    def requestParameters = []//alan_f    
     //There is no exception handling here, so that the exception can be uniquely handled by the calling method. 
     if (authToken == null) {
         authToken = token
     }
-    def requestParameters = [uri: teslaUrl, path: path, headers: ['User-Agent': agent, 'X-Tesla-User-Agent': agent, Authorization: "Bearer ${authToken}"]]
+    if (useTessie) {
+        fulluri = tessieUrl + path
+        requestParameters = [uri: fulluri, headers: [Authorization: "Bearer ${tessieToken}"]] 
+        logger("request parameters = " + requestParameters, "debug")
+    } //alan_f
+    else
+    {
+    requestParameters = [uri: teslaUrl, path: path, headers: ['User-Agent': agent, 'X-Tesla-User-Agent': agent, Authorization: "Bearer ${authToken}"]]
+    }
+    
     httpGet(requestParameters) {resp -> closure(resp)}
+    
 }
 
 private httpAuthPost(Map params = [:], String cmdName, String path, Closure closure, Integer attempt = null) {
@@ -1424,12 +1476,21 @@ private httpAuthPost(Map params = [:], String cmdName, String path, Closure clos
         attemptStr = ", Attempt: ${tryCount}"
     }
     String authToken = getToken()
-    if (authToken) {
+    if (authToken || useTessie) {  //alan_f
        logger ("Command: ${cmdName} ${params?.body}" + attemptStr,"debug")
        try {
-           def requestParameters = [uri: teslaUrl, path: path, headers: ['User-Agent': agent, 'X-Tesla-User-Agent': agent, Authorization: "Bearer ${authToken}"]]
+           //alan_f
+           def requestParameters
+           if (useTessie) {
+           requestParameters = [uri: tessieUrl, path: path, headers: ['User-Agent': agent, 'X-Tesla-User-Agent': agent, Authorization: "Bearer ${tessieToken}"]]
+           }
+           else
+           {
+           requestParameters = [uri: teslaUrl, path: path, headers: ['User-Agent': agent, 'X-Tesla-User-Agent': agent, Authorization: "Bearer ${authToken}"]]
+           }
            if (params.body) {
-               requestParameters["body"] = params.body
+               String jsonbody = new groovy.json.JsonOutput().toJson(params.body)
+               requestParameters["body"] = jsonbody
                httpPostJson(requestParameters) {resp -> closure(resp)}
            } else {
                httpPost(requestParameters) {resp -> closure(resp)}
@@ -2439,6 +2500,8 @@ def refresh(child) {
     if (logLevel == "debug" | logLevel == "trace") {
         logger ("refresh requested","debug")
     }
+    if (useTessie) { getPowerwalls() }
+    
     state.lastHeartbeatUpdateTime = [:]
     runIn(1, processServerMain)
     runIn(2, processGatewayMain)
@@ -2618,10 +2681,18 @@ Boolean validateInputToken() {
     Boolean tokenValid = (codeFromToken == 200) 
     state.inputAccessTokenValid = tokenValid
     state.inputAccessTokenStatus = validationStrFromCode (codeFromToken)
-    if (tokenValid) {
+    if (tokenValid || useTessie) {
         state.serverFailureMode = false
     }  
-    logger ("Input Access Token Valid: ${tokenValid}","debug")
+    if (useTessie) {
+        logger  ("Input Access Token check skipped - Using Tessie", "debug")
+        tokenValid = true
+        state.inputAccessTokenValid = true //alan_f
+    }
+    else
+    {
+        logger ("Input Access Token Valid: ${tokenValid}","debug")
+    }
     return tokenValid
 }
 
@@ -2802,6 +2873,7 @@ def hrefMenuPage (String page, String titleStr, String descStr, String image, pa
 // Constants
 @Field static final Map logLevels = ["none":0, "trace":1,"debug":2,"info":3, "warn":4,"error":5]
 @Field static final String teslaUrl = "https://owner-api.teslamotors.com"
+@Field static final String tessieUrl = "https://api.tessie.com" //alan_f
 @Field static final String ddUrl = "https://darwinsden.com/powerwall/"
 @Field static final String versionUrl = "https://raw.githubusercontent.com/DarwinsDen/Tesla-Powerwall-Manager/master/packageManifest.json"
 @Field static final String teslaBearerTokenEndpoint = "https://auth.tesla.com/oauth2/v3/token"
