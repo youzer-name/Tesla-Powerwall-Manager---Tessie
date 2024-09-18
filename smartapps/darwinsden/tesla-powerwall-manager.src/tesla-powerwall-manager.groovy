@@ -814,9 +814,7 @@ def pageTessie() {
         section("Tessie Settings") {
             input "useTessie", "bool", required: false, defaultValue: false, title: "use Tessie API instead of Tesla API"
             input "tessieToken", "string", required: false, title: "Your Tessie API token"
-            input "tessieSiteId", "string", required: false, title: "Your Tesla Energy site ID"
-
-        }
+	}
     }
 }
 
