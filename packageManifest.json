@@ -1,17 +1,18 @@
 {
-  "packageName": "Tesla Powerwall Manager",
-  "author": "DarwinsDen",
-  "minimumHEVersion": "2.0.0",
-  "dateReleased": "2024-04-08",
-  "releaseNotes": "v0.3.84:\n-Correct for apparent Tesla server API change related to battery percentage. Thanks to @NeilR.",
+  "packageName": "Tesla Powerwall Manager - Tessie",
+  "author": "alan_f",
+  "minimumHEVersion": "0.0.1",
+  "dateReleased": "2024-09-17",
+  "releaseNotes": "v0.0.1:\n-Fork for Tessie",
   "licenseFile": "https://www.apache.org/licenses/LICENSE-2.0.txt",
   "documentationLink": "https://darwinsden.com/powerwall/",
   "apps": [
     {
       "id": "9683e3b2-f9a2-4889-81c8-a9f8ac887d4f",
       "name": "Tesla Powerwall Manager",
-      "namespace": "darwinsden",
-      "location": "https://raw.githubusercontent.com/DarwinsDen/Tesla-Powerwall-Manager/master/smartapps/darwinsden/tesla-powerwall-manager.src/tesla-powerwall-manager.groovy",
+      "namespace": "alan_f",
+      "location": "https://raw.githubusercontent.com/youzer-name/Tesla-Powerwall-Manager---Tessie/master/smartapps/darwinsden/tesla-powerwall-manager.src/tesla-powerwall-manager.groovy",
+      
       "required": true,
       "oauth": false,
       "version": "0.3.84"
