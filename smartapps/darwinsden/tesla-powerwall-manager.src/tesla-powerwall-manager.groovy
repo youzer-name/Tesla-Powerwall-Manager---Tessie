@@ -2873,7 +2873,7 @@ def hrefMenuPage (String page, String titleStr, String descStr, String image, pa
 @Field static final String teslaUrl = "https://owner-api.teslamotors.com"
 @Field static final String tessieUrl = "https://api.tessie.com" //alan_f
 @Field static final String ddUrl = "https://darwinsden.com/powerwall/"
-@Field static final String versionUrl = "https://raw.githubusercontent.com/DarwinsDen/Tesla-Powerwall-Manager/master/packageManifest.json"
+@Field static final String versionUrl = "https://raw.githubusercontent.com/youzer-name/Tesla-Powerwall-Manager---Tessie/master/packageManifest.json"
 @Field static final String teslaBearerTokenEndpoint = "https://auth.tesla.com/oauth2/v3/token"
 @Field static final String teslaBearerTokenGrantType = "refresh_token"
 @Field static final String teslaBearerTokenClientId = "ownerapi"
