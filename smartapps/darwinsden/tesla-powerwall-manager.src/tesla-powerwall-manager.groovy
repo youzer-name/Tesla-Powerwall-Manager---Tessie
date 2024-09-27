@@ -1926,7 +1926,7 @@ def processGwFullStatusResponse(response, callData) {
        def child = getPwDevice()
        updateIfChanged(child, "currentCapacity", data.nominal_full_pack_energy.toInteger())
    } else {
-       logger ("Error procesing gateway full status: ${response.getStatus() ${response.getErrorMessage()}}","warn")
+       logger ("Error procesing gateway full status: ${response.getStatus()} ${response.getErrorMessage()}","warn")
    }      
 }
 
